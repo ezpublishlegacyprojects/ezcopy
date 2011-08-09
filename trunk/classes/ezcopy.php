@@ -118,6 +118,8 @@ class eZCopy
 		set_include_path(get_include_path() . PATH_SEPARATOR . $basePath);
 		
 		// include files in new distro for parsing ini files
+		include_once($basePath . '/lib/ezi18n/classes/eztextcodec.php');
+		include_once($basePath . '/lib/ezi18n/classes/ezcharsetinfo.php');
 		include_once($basePath . '/lib/ezutils/classes/ezdebug.php');
 		include_once($basePath . '/lib/ezutils/classes/ezsys.php');
 		include_once($basePath . '/lib/ezfile/classes/ezdir.php');
@@ -254,7 +256,7 @@ class eZCopy
 			$this->data['archive_name']	= '';
 		}
 		
-		if(!isset($this->data['local_file']))
+		if(!isset($this->data['local_file']) or trim($this->data['local_file']) == "")
 		{
 			$this->data['local_file']	= $this->data['archive_name'];
 		}
@@ -534,7 +536,14 @@ class eZCopy
 	{
 		$this->log("Logging in via SSH ");
 		
-		$this->s 		= new Net_SSH2($this->data['ssh_host']);
+		if(count($hostPart=explode(':', $this->data['ssh_host']))>1)
+		{
+			$this->s 		= new Net_SSH2($hostPart[0], $hostPart[1]);
+		}
+		else
+		{
+			$this->s 		= new Net_SSH2($this->data['ssh_host']);
+		}
 		
 		if ($this->s->login($this->data['ssh_user'], $this->data['ssh_pass']))
 		{
@@ -556,7 +565,14 @@ class eZCopy
 	{
 		$this->log("Logging in via SFTP ");
 		
-		$this->sftp 		= new Net_SFTP($this->data['ssh_host']);
+		if(count($hostPart=explode(':', $this->data['ssh_host']))>1)
+		{
+			$this->sftp 	= new Net_SFTP($hostPart[0], $hostPart[1]);
+		}
+		else
+		{
+			$this->sftp 	= new Net_SFTP($this->data['ssh_host']);
+		}
 		
 		if ($this->sftp->login($this->data['ssh_user'], $this->data['ssh_pass']))
 		{
@@ -667,7 +683,15 @@ class eZCopy
 			$filesizeinfo = $this->exec($cmd);
 			$filesize = str_replace( $this->getBasePath() . $this->dbDumpDir . $db['File'], '', $filesizeinfo );
 			$this->data['db_dump_filesize'] = trim($filesize)*1024;
-			$this->log( $db[ 'Database' ] . ': OK (' . $this->MBFormat($this->data['db_dump_filesize']) . ")\n", 'ok');
+			
+			if ( $this->data['db_dump_filesize' ] > 0 )
+			{
+				$this->log( $db[ 'Database' ] . ': OK (' . $this->MBFormat($this->data['db_dump_filesize']) . ")\n", 'ok');
+			}
+			else
+			{
+				$this->log( $db['Database'] . ' size is 0. Please check your database settings', 'critical' );
+			}
 		}
 	}
 	

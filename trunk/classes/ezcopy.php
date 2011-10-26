@@ -5,7 +5,7 @@ if(!defined('EZCOPY_APP_PATH'))
 	define('EZCOPY_APP_PATH', '');
 }
 
-set_include_path(get_include_path() . PATH_SEPARATOR . EZCOPY_APP_PATH . 'lib/phpseclib0.1.5');
+set_include_path(get_include_path() . PATH_SEPARATOR . EZCOPY_APP_PATH . 'lib/phpseclib0.2.2');
 
 include_once(EZCOPY_APP_PATH . 'classes/ezcomponents.php');
 include_once('Net/SSH2.php');
@@ -735,11 +735,13 @@ class eZCopy
 		$this->exec($command);
 		
 		// get the size of the file
-		$fileSize = trim($this->exec("stat -c%s " . $this->data['archive_name']));
-		
-		$this->data['archive_filesize'] = $fileSize;
-		
-		$this->log("OK (" . $this->MBFormat($fileSize). ")\n", 'ok');
+		$command = "du --bytes " . $this->data['archive_name'];
+		$fileSizeResult = trim($this->exec($command));
+		list($fileSize, $fileName) = explode("\t", $fileSizeResult);
+
+		$this->log("OK (" . $this->MBFormat($fileSize). ")\n", 'ok');	
+
+		$this->data['archive_filesize'] = $fileSize; // convert it to bytes
 	}
 	
 	function fileCount()
@@ -774,7 +776,7 @@ class eZCopy
 		{
 			usleep(1000);
 		}
-		
+
 		$output = new ezcConsoleOutput();
 		$bar 	= new ezcConsoleProgressbar( $output, (int) $remoteFileSize );
 		

@@ -5,9 +5,29 @@ if(!defined('EZCOPY_APP_PATH'))
 	define('EZCOPY_APP_PATH', '');
 }
 
-set_include_path(get_include_path() . PATH_SEPARATOR . EZCOPY_APP_PATH . 'lib/phpseclib0.2.2');
-
 include_once(EZCOPY_APP_PATH . 'classes/ezcomponents.php');
+
+$phpseclib_default = "phpseclib0.2.2";
+$phpseclib_cfg = ezcConfigurationManager::getInstance();
+$phpseclib_cfg->init( 'ezcConfigurationIniReader', 'settings' );
+
+
+try
+{
+	$phpseclib_version = $phpseclib_cfg->getSetting('ezcopy', 'General', 'phpseclib');
+	if (strlen($phpseclib_version)<1) 
+	{
+		$phpseclib_version = $phpseclib_default;
+	}
+}
+catch(Exception $e)
+{
+	
+	$phpseclib_version = $phpseclib_default;
+}
+
+define('PHPLIBSEC_VERSION',$phpseclib_version);
+set_include_path(get_include_path() . PATH_SEPARATOR . EZCOPY_APP_PATH . 'lib/'.$phpseclib_version);
 include_once('Net/SSH2.php');
 include_once('Net/SFTP.php');
 
@@ -557,7 +577,7 @@ class eZCopy
 		}
 		else
 		{
-			$this->log("Unable to log in\n", 'critical');
+			$this->log("Unable to log in (using ".PHPLIBSEC_VERSION.")\nRemember that you can change the phpseclib version in the config file\n",'critical');
 		}
 	}
 	
@@ -674,6 +694,7 @@ class eZCopy
 		{	
 			// build and execute the database dump command
 			$cmd = "cd " . $this->getBasePath() . ";mysqldump -h" . $db['Server'] . " -u" . $db['User'] . " -p" . $db['Password'] . " " . $db['Database'] . " > " . $this->dbDumpDir . $db['File'];
+
 			$this->exec($cmd);
 			
 			// get the size of the file

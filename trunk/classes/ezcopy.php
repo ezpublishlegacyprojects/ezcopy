@@ -6,6 +6,7 @@ if(!defined('EZCOPY_APP_PATH'))
 }
 
 include_once(EZCOPY_APP_PATH . 'classes/ezcomponents.php');
+include_once(EZCOPY_APP_PATH . 'classes/dbhandler.php');
 
 $phpseclib_default = "phpseclib0.2.2";
 $phpseclib_cfg = ezcConfigurationManager::getInstance();
@@ -44,14 +45,20 @@ class eZCopy
 	// The base path of the eZ installation. This will be set by ezcopy, but can be
 	// overriden
 	var $ezBasePath;
+
+	var $loginstance;
+	var $writer;
+
+	var $dbhandler;
 	
 	function eZCopy()
 	{
 		$this->output = new ezcConsoleOutput();
-		
 		$this->cfg = ezcConfigurationManager::getInstance();
 		$this->cfg->init( 'ezcConfigurationIniReader', 'settings' );
-		
+		$this->writer = false;
+		$this->loginstance = ezcLog::getInstance();
+
 		$this->dbRootUser = $this->cfg->getSetting('ezcopy', 'DBRoot', 'username');
 		$this->dbRootPass = $this->cfg->getSetting('ezcopy', 'DBRoot', 'password');
 		
@@ -67,6 +74,31 @@ class eZCopy
 		$this->dbDumpDir = '_dbdump/';
 		
 		$this->local = false;
+	}
+
+	function initializeDBHandler($identifier)
+	{
+		$blockName = "Account_{$identifier}";
+		if($this->cfg->hasSetting( 'ezcopy', $blockName, 'dbms' ))
+		{
+			$this->dbms = strtolower($this->cfg->getSetting('ezcopy', $blockName, 'dbms'));
+			if($this->dbms == 'mysql')
+			{
+				$this->dbhandler = new dbhandler($this);
+			}
+			else
+			{
+				include_once(EZCOPY_APP_PATH.'classes/dbhandlers/'.$this->dbms.'handler.php');
+				$handlername = $this->dbms."handler";
+				$this->dbhandler = new $handlername($this);	
+			}
+			
+		}
+		else
+		{
+			$this->dbms = 'mysql';
+			$this->dbhandler = new dbhandler($this);
+		}
 	}
 
 	
@@ -98,7 +130,7 @@ class eZCopy
 		// if not, execute the command through the ssh connection
 		else
 		{
-			return $this->s->exec($cmd);	
+			return $this->s->exec($cmd);
 		}
 	}
 	
@@ -242,24 +274,24 @@ class eZCopy
 		
 		// TODO: Fetch password (and server name) from nethosting.no
 		
-		if(!isset($this->data['mysql_pass']))
+		if(!isset($this->data['db_pass']))
 		{
-			$this->data['mysql_pass']	= $this->data['ssh_pass'];
+			$this->data['db_pass']	= $this->data['ssh_pass'];
 		}
 		
-		if(!isset($this->data['mysql_user']))
+		if(!isset($this->data['db_user']))
 		{
-			$this->data['mysql_user']	= $this->data['ssh_user'] . "_ezp";
+			$this->data['db_user']	= $this->data['ssh_user'] . "_ezp";
 		}
 		
-		if(!isset($this->data['mysql_db']))
+		if(!isset($this->data['db']))
 		{
-			$this->data['mysql_db']		= $this->data['mysql_user'];
+			$this->data['db']		= $this->data['db_user'];
 		}
 		
-		if(!isset($this->data['mysql_host']))
+		if(!isset($this->data['db_host']))
 		{
-			$this->data['mysql_host']	= 'localhost';
+			$this->data['db_host']	= 'localhost';
 		}
 		
 		if(!isset($this->data['path_to_ez']))
@@ -283,7 +315,7 @@ class eZCopy
 		
 		$this->data['document_root'] = $this->getLocalDocumentRoot();
 		
-		$this->data['mysql_file']	= $this->data['mysql_db'] . '.sql';
+		$this->data['mysql_file']	= $this->data['db'] . '.sql';
 		$this->data['remote_file']	= $this->data['archive_name'];
 	}
 	
@@ -357,7 +389,7 @@ class eZCopy
 		$this->logIn();
 				
 		// dump database
-		$this->dumpDatabase();
+		$this->dbhandler->dumpDatabase();
 		
 		// download database
 		$this->downloadDatabase();
@@ -371,7 +403,7 @@ class eZCopy
 		$this->logIn();
 				
 		// dump database
-		$this->dumpDatabase();
+		$this->dbhandler->dumpDatabase();
 		
 		// download database
 		$this->downloadDatabase();
@@ -404,7 +436,7 @@ class eZCopy
 		$this->logIn();
 		
 		// dump database
-		$this->dumpDatabase();
+		$this->dbhandler->dumpDatabase();
 		
 		// create archive
 		$this->createArchive();
@@ -440,7 +472,7 @@ class eZCopy
 		$this->checkQuota();
 		
 		// dump database
-		$this->dumpDatabase();
+		$this->dbhandler->dumpDatabase();
 		
 		// create archive
 		$this->createArchive();
@@ -455,13 +487,13 @@ class eZCopy
 		$this->unPackArchive();
 		
 		// create database
-		$this->createDatabaseList();
+		$this->dbhandler->createDatabaseList();
 		
 		// grant user access to database
-		$this->grantDBUserAccessList();
+		$this->dbhandler->grantDBUserAccessList();
 		
 		// apply database
-		$this->applyDatabases();
+		$this->dbhandler->applyDatabases();
 		
 		// local cleanup
 		$this->localCleanUp();
@@ -481,13 +513,13 @@ class eZCopy
 		$this->unPackArchive(true);
 		
 		// create database
-		$this->createDatabase();
+		$this->dbhandler->createDatabase();
 		
 		// grant user access to database
-		$this->grantDBUserAccess();
+		$this->dbhandler->grantDBUserAccess();
 		
 		// apply database
-		$this->applyDatabase();
+		$this->dbhandler->applyDatabase();
 		
 		// local cleanup
 		$this->localCleanUp();
@@ -522,7 +554,7 @@ class eZCopy
 		$this->selectAccount($identifier);
 		
 		// delete local database
-		$this->deleteLocalDatabase();
+		$this->dbhandler->deleteLocalDatabase();
 				
 		// delete site directory
 		$this->deleteLocalSite();
@@ -536,19 +568,6 @@ class eZCopy
 		
 		exec('rm -rf ' . $this->data['document_root'] . $this->data['ssh_user']);
 
-		$this->log("OK\n", 'ok');
-	}
-	
-	function deleteLocalDatabase()
-	{
-		$this->log("Deleting database and DB user ");
-
-		$cmd = "echo \"drop database " . $this->data['mysql_db'] . "; " . 
-		"revoke all privileges, grant option from '" . $this->data['mysql_user'] . "'@'localhost';" . 
-		"drop user '" . $this->data['mysql_user'] . "'@'localhost';\" | " . $this->dbRootCmd();
-				
-		exec($cmd);
-		
 		$this->log("OK\n", 'ok');
 	}
 	
@@ -636,84 +655,50 @@ class eZCopy
 	{
 		// fetch list of db accesses
 		$result = array();
-		$result[ $this->data[ 'mysql_db' ] ] = array( 	'User'		=> $this->data[ 'mysql_user' ],
-														'Password'	=> $this->data[ 'mysql_pass' ],
-														'Database'	=> $this->data[ 'mysql_db' ],
-														'Server' 	=> $this->data[ 'mysql_host' ],
+		$result[ $this->data[ 'db' ] ] = array( 	'User'		=> $this->data[ 'db_user' ],
+														'Password'	=> $this->data[ 'db_pass' ],
+														'Database'	=> $this->data[ 'db' ],
+														'Server' 	=> $this->data[ 'db_host' ],
 														'File'		=> $this->data[ 'mysql_file' ] );
-		if ( isset($this->data[ 'additional_mysql' ]) and is_array( $this->data[ 'additional_mysql' ] ) )
+		if ( isset($this->data[ 'additional_db' ]) and is_array( $this->data[ 'additional_db' ] ) )
 		{
-			foreach( $this->data[ 'additional_mysql' ] as $additional_mysql )
+			foreach( $this->data[ 'additional_db' ] as $additional_db )
 			{
-				if ( trim($additional_mysql[ 'user' ]) == '' )
+				if ( trim($additional_db[ 'user' ]) == '' )
 				{
-					$user = $this->data[ 'mysql_user' ];
+					$user = $this->data[ 'db_user' ];
 				}
 				else
 				{
-					$user = $additional_mysql[ 'user' ];
+					$user = $additional_db[ 'user' ];
 				}
-				if ( trim($additional_mysql[ 'pass' ]) == '' )
+				if ( trim($additional_db[ 'pass' ]) == '' )
 				{
-					$pass = $this->data[ 'mysql_pass' ];
-				}
-				else
-				{
-					$pass = $additional_mysql[ 'pass' ];
-				}
-				if ( trim($additional_mysql[ 'host' ]) == '' )
-				{
-					$host = $this->data[ 'mysql_host' ];
+					$pass = $this->data[ 'db_pass' ];
 				}
 				else
 				{
-					$host = $additional_mysql[ 'host' ];
+					$pass = $additional_db[ 'pass' ];
 				}
-				if ( trim( $additional_mysql[ 'db' ] ) != '' )
+				if ( trim($additional_db[ 'host' ]) == '' )
 				{
-					$result[$additional_mysql['db']] = array( 	'User'		=> $user,
+					$host = $this->data[ 'db_host' ];
+				}
+				else
+				{
+					$host = $additional_db[ 'host' ];
+				}
+				if ( trim( $additional_db[ 'db' ] ) != '' )
+				{
+					$result[$additional_db['db']] = array( 	'User'		=> $user,
 																'Password'	=> $pass,
-																'Database'	=> $additional_mysql['db'],
+																'Database'	=> $additional_db['db'],
 																'Server'	=> $host,
-																'File'		=> $additional_mysql['db'].'.sql' );
+																'File'		=> $additional_db['db'].'.sql' );
 				}
 			}
 		}
 		return $result;
-	}
-	function dumpDatabase()
-	{
-		$this->log("Dumping database\n");
-		
-		// prepare the directory to which the databases will be dumped
-		$this->prepareDBDumpDir();
-		
-		$dbList = $this->fetchDbList();
-		
-		foreach( $dbList as $db )
-		{	
-			// build and execute the database dump command
-			$cmd = "cd " . $this->getBasePath() . ";mysqldump -h" . $db['Server'] . " -u" . $db['User'] . " -p" . $db['Password'] . " " . $db['Database'] . " > " . $this->dbDumpDir . $db['File'];
-
-			$this->exec($cmd);
-			
-			// get the size of the file
-			//$cmd = "stat -c%s " . $this->getBasePath() . $this->dbDumpDir . $db['File'];
-			
-			$cmd = "du -k " . $this->getBasePath() . $this->dbDumpDir . $db['File'];
-			$filesizeinfo = $this->exec($cmd);
-			$filesize = str_replace( $this->getBasePath() . $this->dbDumpDir . $db['File'], '', $filesizeinfo );
-			$this->data['db_dump_filesize'] = trim($filesize)*1024;
-			
-			if ( $this->data['db_dump_filesize' ] > 0 )
-			{
-				$this->log( $db[ 'Database' ] . ': OK (' . $this->MBFormat($this->data['db_dump_filesize']) . ")\n", 'ok');
-			}
-			else
-			{
-				$this->log( $db['Database'] . ' size is 0. Please check your database settings', 'critical' );
-			}
-		}
 	}
 	
 	function prepareDBDumpDir()
@@ -884,118 +869,13 @@ class eZCopy
 		$this->unPackTar($target, $this->data['document_root'] . $this->data['ssh_user']);
 	}
 	
-	function dbUserPass()
-	{
-		$cmd = "-u " . $this->dbRootUser;
-		
-		if($this->dbRootPass != '')
-		{
-			$cmd .= " -p" . $this->dbRootPass;
-		}
-		
-		return $cmd;
-	}
-	
-	function dbRootCmd()
-	{
-		$cmd = "mysql " . $this->dbUserPass();; 
-		
-		return $cmd;
-	}
-	function createDatabaseList()
-	{
-		$dbList = $this->fetchDbList();
-		foreach( $dbList as $db )
-		{
-			$this->createDatabase( $db['Database'] );
-		}
-	}
-	function createDatabase($dbName = false)
-	{
-		if(!$dbName)
-		{
-			$dbName = $this->data['mysql_db'];
-		}
 
-		$this->log("Creating database $dbName ");
-		
-		$cmd = "echo \"create database if not exists " . $dbName . " default character set utf8 collate utf8_general_ci\" | " . $this->dbRootCmd();
-				
-		exec($cmd);
-		
-		$this->log("OK\n", 'ok');
-	}
-	
-	function grantDBUserAccessList()
-	{
-		$dbList = $this->fetchDbList();
-		foreach( $dbList as $db )
-		{
-			$this->grantDBUserAccess( $db['User'], $db['Password'], $db['Database'] );
-		}
-	}
-	function grantDBUserAccess($user = false, $pass = false, $name = false)
-	{
-		if(!$user)
-		{
-			$user = $this->data['mysql_user'];
-		}
-		
-		if(!$pass)
-		{
-			$pass = $this->data['mysql_pass'];
-		}
-		
-		if(!$name)
-		{
-			$name = $this->data['mysql_db'];
-		}
-		
-		$this->log("Granting DB user $user access to database $name ");
-		
-		$cmd = "echo \"grant all privileges on " . $name . ".* to " .
-     	$user . "@localhost identified by '" . $pass . "'\" | " . $this->dbRootCmd();
-	 	
-     	exec($cmd);
-		
-		$this->log("OK\n", 'ok');
-	}
 	
 	function getCopyLocation()
 	{
 		return $this->data['document_root'] . $this->data['ssh_user'] . "/";
 	}
 	
-	function applyDatabases()
-	{
-		$dbList = $this->fetchDbList();
-		foreach( $dbList as $db )
-		{
-			$dumpFile = $this->getCopyLocation() . $this->dbDumpDir . $db[ 'File' ];
-			$this->applyDatabase( $db[ 'Database' ], $dumpFile );
-		}
-	}
-	function applyDatabase($dbName = false, $sqlDumpFile = false)
-	{
-		if(!$sqlDumpFile)
-		{
-			$sqlDumpFile = $this->getCopyLocation() . $this->dbDumpDir . $this->data['mysql_file'];
-		}
-		
-		if(!$dbName)
-		{
-			$dbName = $this->data['mysql_db'];
-		}
-		
-		$this->log("Applying $sqlDumpFile to database $dbName ");
-		
-		// checkpoint 
-		$this->checkpoint( 'Applying ' . $sqlDumpFile . ' to database ' . $dbName );
-		
-		exec($this->dbRootCmd() . " " . $dbName . " < " . $sqlDumpFile);
-		
-		$this->log("OK\n", 'ok');
-	}
 	
 	function localCleanUp()
 	{
@@ -1062,29 +942,29 @@ class eZCopy
 	}
 	function checkpoint($exitedOn, $extraText='', $forceCheckpoint=false)
 	{
-			if ( $this->checkpoint OR $forceCheckpoint)
+		if ( $this->checkpoint OR $forceCheckpoint)
+		{
+			$this->output->formats->question->color = 'blue';
+			$question = new ezcConsoleQuestionDialog( $this->output );
+			$question->options->text = $extraText . "Do you want to continue?";
+			$question->options->format = 'question';
+			$question->options->showResults = true;
+			$question->options->validator = new ezcConsoleQuestionDialogCollectionValidator(
+			array( "y", "n" ),
+			"y",
+			ezcConsoleQuestionDialogCollectionValidator::CONVERT_LOWER
+			);
+			
+			// if the answer is yes
+			if(ezcConsoleDialogViewer::displayDialog( $question ) == 'y')
 			{
-				$this->output->formats->question->color = 'blue';
-				$question = new ezcConsoleQuestionDialog( $this->output );
-				$question->options->text = $extraText . "Do you want to continue?";
-				$question->options->format = 'question';
-				$question->options->showResults = true;
-				$question->options->validator = new ezcConsoleQuestionDialogCollectionValidator(
-				array( "y", "n" ),
-				"y",
-				ezcConsoleQuestionDialogCollectionValidator::CONVERT_LOWER
-				);
-				
-				// if the answer is yes
-				if(ezcConsoleDialogViewer::displayDialog( $question ) == 'y')
-				{
-					return true;
-				}
-				else
-				{
-					$this->log( 'Exited on: ' . $exitedOn, 'critical' );
-				}
+				return true;
 			}
+			else
+			{
+				$this->log( 'Exited on: ' . $exitedOn, 'critical' );
+			}
+		}
 		return true;
 	}
 	function writeLog( $msg, $format='ok')
@@ -1101,8 +981,9 @@ class eZCopy
 				$type 	= ezcLog::INFO;
 				break;
 		}
-		$log 	= ezcLog::getInstance();
-	
+		$log 	= $this->loginstance;
+
+
 	 	$logsFolder 	= $_SERVER["PWD"] ."/" . EZCOPY_APP_PATH . 'logs/';
 
 	 	$accountFolder	= $logsFolder . $this->upgradeData['account_name'];
@@ -1118,12 +999,14 @@ class eZCopy
 		{
 			mkdir( $accountFolder, 0777 );
 		}
-		
-	 	$writer = new ezcLogUnixFileWriter( $accountFolder, date( 'Y-m-d'). ".log" );
-		$log->getmapper()->appendRule( new ezcLogFilterRule( new ezcLogFilter, $writer, true ) );
+
+		if(!$this->writer)
+		{
+			$this->writer = new ezcLogUnixFileWriter( $accountFolder, date( 'Y-m-d'). ".log" );
+			$log->getmapper()->appendRule( new ezcLogFilterRule( new ezcLogFilter, $this->writer, true ) );
+		}
 		// Writing some log messages.
  		$log->log( $msg, $type, array( 'category' => "", 'source' => "" ));
- 		unset($log);
 	}
 	function log($msg, $format = false)
 	{

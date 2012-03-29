@@ -32,6 +32,7 @@ $actionArray = array(	'download-install' 	=> 'actionInstallAll',
 // if we know what to do with this action
 if(isset($actionArray[$action]))
 {
+	$ezcopy->initializeDBHandler($identifier);
 	$methodName = $actionArray[$action];
 	$ezcopy->$methodName($identifier);
 }

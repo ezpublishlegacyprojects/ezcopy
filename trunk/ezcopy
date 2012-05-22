@@ -20,6 +20,16 @@ if($argc < 2)
 $action		= $argv[1];
 $identifier = $argv[2];
 
+// if additional arguments are provided
+if(isset($argv[3]))
+{
+	$ezcopy->setAdditionalOptions(array_slice($argv, 3));
+}
+else
+{
+	echo "No additional arguments";
+}
+
 $actionArray = array(	'download-install' 	=> 'actionInstallAll', 
 						'download'			=> 'actionDownloadAll', 
 						'install'			=> 'actionInstall', 

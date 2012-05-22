@@ -50,6 +50,9 @@ class eZCopy
 	var $writer;
 
 	var $dbhandler;
+
+	// Optional, additional options
+	var $optionList;
 	
 	function eZCopy()
 	{
@@ -72,6 +75,8 @@ class eZCopy
 		}
 		
 		$this->dbDumpDir = '_dbdump/';
+
+		$this->optionList = array();
 		
 		$this->local = false;
 	}
@@ -317,6 +322,12 @@ class eZCopy
 		
 		$this->data['mysql_file']	= $this->data['db'] . '.sql';
 		$this->data['remote_file']	= $this->data['archive_name'];
+
+		// override settings with any options that might have been set
+		foreach($this->getOptionList() as $key => $value)
+		{
+			$this->data[$key] = $value;
+		}
 	}
 	
 	function getLocalDocumentRoot()
@@ -331,6 +342,32 @@ class eZCopy
 		}
 	}
 	
+	function getOption($identifier)
+	{
+		if(isset($this->optionList[$identifier]))
+		{
+			return $this->optionList[$identifier];
+		}
+		else 
+		{
+			return false;
+		}
+	}
+
+	function getOptionList()
+	{
+		return $this->optionList;
+	}
+
+	function setAdditionalOptions($optionList)
+	{
+		foreach($optionList as $option)
+		{
+			list($key, $value) = explode('=', $option);
+			$this->optionList[$key] = $value;
+		}
+	}
+
 	function actionListInstallations()
 	{
 		// get account list
@@ -861,8 +898,16 @@ class eZCopy
 		{
 			$cmd .= "mv";
 		}
+
+		// if a specific position has been given for the tarball
+		$tarBallOriginalLocation = $this->getOption('tarball_location');
+		if(!$tarBallOriginalLocation)
+		{
+			// provide a default location for the tarball
+			$tarBallOriginalLocation = $this->data['document_root'] . $this->data['local_file'];
+		}
 		
-		$cmd .= " " . $this->data['document_root'] . $this->data['local_file'] . " " . $target;
+		$cmd .= " " . $tarBallOriginalLocation . " " . $target;
 		exec($cmd);
 		
 		// unpack tarball

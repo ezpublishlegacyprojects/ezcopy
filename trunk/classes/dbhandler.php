@@ -112,6 +112,7 @@ class dbhandler
 	function applyDatabases()
 	{
 		$dbList = $this->ezcopy->fetchDbList();
+
 		foreach( $dbList as $db )
 		{
 			$dumpFile = $this->ezcopy->getCopyLocation() . $this->ezcopy->dbDumpDir . $db[ 'File' ];
@@ -127,7 +128,7 @@ class dbhandler
 		
 		if(!$dbName)
 		{
-			$dbName = $this->data['db'];
+			$dbName = $this->ezcopy->data['db'];
 		}
 		
 		$this->ezcopy->log("Applying $sqlDumpFile to database $dbName ");

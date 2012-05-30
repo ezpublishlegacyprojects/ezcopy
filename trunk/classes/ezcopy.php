@@ -135,7 +135,11 @@ class eZCopy
 		// if not, execute the command through the ssh connection
 		else
 		{
-			return $this->s->exec($cmd);
+			$cmdResult = $this->s->exec($cmd);
+
+			# in some casthe result may contain the string "stdin: is not a tty", 
+			# so let's strip that out
+			return str_replace("stdin: is not a tty\n", "", $cmdResult);
 		}
 	}
 	

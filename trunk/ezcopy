@@ -25,10 +25,6 @@ if(isset($argv[3]))
 {
 	$ezcopy->setAdditionalOptions(array_slice($argv, 3));
 }
-else
-{
-	echo "No additional arguments";
-}
 
 $actionArray = array(	'download-install' 	=> 'actionInstallAll', 
 						'download'			=> 'actionDownloadAll', 
